@@ -6,7 +6,6 @@ from lxml import html
 import requests
 import xlsxwriter
 
-
 # XLSX file
 workbook = xlsxwriter.Workbook('fiis.xlsx')
 worksheet = workbook.add_worksheet()
@@ -42,7 +41,7 @@ for key, val in writers.items():
 
 # Read FIIs code from database
 data = []
-with open('fonte.csv', "r") as csvfile:
+with open('fonteCompleta.csv', "r") as csvfile:
     reader = csv.reader(csvfile, delimiter=",")
     for row in reader:
         data.append(row[0])
@@ -54,44 +53,78 @@ treeFE = Any
 
 # Replace last ocurrence
 def replace_right(source, target, replacement, replacements=1):
-    return replacement.join(source.rsplit(target, replacements))
+    if type(source) is str:
+        return replacement.join(source.rsplit(target, replacements))
+    else:
+        return source
+
+# Check position and return data
+def checkData(data):
+    if data:
+        value = data[0].replace("\n","").rstrip().lstrip()
+        return value
+    else:
+        return ""
+
+def checkValues(data):
+    if data:
+        value = data[0].replace("\n","").replace("R$","").replace(" ","").replace(",", ".")
+        if value == "N/A" or value == "-":
+            return 0
+        else:
+            return value
+    else:
+        return 0
 
 # Read and save informations
 def processData(fii):
+    print(fii)
+
     sheetColumn = 0
     worksheet.write(sheetRow, sheetColumn, fii)
     sheetColumn += 1
 
-    qtdAtivos = treeFE.xpath('(//*[@id="fund-actives-chart-info-wrapper"]/span[1])/text()') # QTD DE ATIVOS
-    vlrPatrimonialPorCota = treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[1]/div/div[1]/strong/text()')[0].replace("R$","").replace(" ","").replace(",", ".") # VALOR PATRIMONIAL POR COTA
-    vlrPatrimonio = treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[1]/div/div[2]/span[2]/text()')[0].replace("R$","").replace(" ","").replace(",", ".") # VALOR DO PATRIMONIO
-    vlrMercado = treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[2]/div/div[2]/span[2]/text()')[0].replace("R$","").replace(" ","").replace(",", ".") # VALOR DE MERCADO
-    lqdzDiaria = treeSI.xpath('//*[@id="main-2"]/div[2]/div[6]/div/div/div[3]/div/div/div/strong/text()')[0].replace("R$","").replace(" ","").replace(",", ".") # LIQUIDEZ MEDIA 30 DIAS
-
     # STATUS INVEST
+    pvp = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[2]/div/div[1]/strong/text()')) # P/VP
+    cotacaoAtual = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[1]/div[1]/div/div[1]/strong/text()')) # COTAÇÃO ATUAL
+    dividendYeld = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[1]/div[4]/div/div[1]/strong/text()')) # DIVIDEND YELD
+    vlrPatrimonialPorCota = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[1]/div/div[1]/strong/text()')) # VALOR PATRIMONIAL POR COTA
+    vlrPatrimonio = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[1]/div/div[2]/span[2]/text()')) # VALOR DO PATRIMONIO
+    vlrMercado = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[2]/div/div[2]/span[2]/text()')) # VALOR DE MERCADO
+    lqdzDiaria = checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[6]/div/div/div[3]/div/div/div/strong/text()')) # LIQUIDEZ MEDIA 30 DIAS    
+    ultimoRendimento = checkValues(treeSI.xpath('//*[@id="dy-info"]/div/div[1]/strong/text()')) # ULTIMO RENDIMENTO
+
+    # FUND EXPLORER
+    qtdAtivos = checkValues(treeFE.xpath('(//*[@id="fund-actives-chart-info-wrapper"]/span[1])/text()')) # QTD DE ATIVOS
+    if qtdAtivos:
+        qtdAtivos = re.sub("[^0-9]", "", qtdAtivos)
+    else:
+        qtdAtivos = 0
+
     dadosFII = [
-        treeSI.xpath('//*[@id="fund-section"]/div/div/div[2]/div/div[1]/div/div/strong/text()')[0], # CNPJ
-        treeSI.xpath('//*[@id="fund-section"]/div/div/div[2]/div/div[2]/div/div/div/strong/text()')[0], # NOME
-        treeSI.xpath('//*[@id="main-2"]/div[2]/div[1]/div[1]/div/div[1]/strong/text()')[0], # COTAÇÃO ATUAL
-        treeSI.xpath('//*[@id="main-2"]/div[2]/div[1]/div[4]/div/div[1]/strong/text()')[0], # DIVIDEND YELD
-        treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[2]/div/div[1]/strong/text()')[0], # P/VP
-        treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[6]/div/div[1]/strong/text()')[0], # TOTAL DE COTISTAS
-        treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[6]/div/div[2]/span[2]/text()')[0], # TOTAL DE COTAS
+        # STATUS INVEST
+        checkData(treeSI.xpath('//*[@id="fund-section"]/div/div/div[2]/div/div[1]/div/div/strong/text()')), # CNPJ
+        checkData(treeSI.xpath('//*[@id="fund-section"]/div/div/div[2]/div/div[2]/div/div/div/strong/text()')), # NOME
+        replace_right(cotacaoAtual, ".", ","),
+        replace_right(dividendYeld, ".", ","),
+        replace_right(pvp, ".", ","),
+        checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[6]/div/div[1]/strong/text()')), # TOTAL DE COTISTAS
+        checkValues(treeSI.xpath('//*[@id="main-2"]/div[2]/div[5]/div/div[6]/div/div[2]/span[2]/text()')), # TOTAL DE COTAS
 
         replace_right(vlrPatrimonialPorCota, ".", ","),
         replace_right(vlrPatrimonio, ".", ","),
         replace_right(vlrMercado, ".", ","),
         replace_right(lqdzDiaria, ".", ","),
-        treeSI.xpath('//*[@id="dy-info"]/div/div[1]/strong/text()')[0], # ULTIMO RENDIMENTO
+        replace_right(ultimoRendimento, ".", ","),
 
         # INVESTIDOR 10
-        treeI10.xpath('//*[@id="table-indicators"]/div[6]/div[2]/div/span/text()')[0].replace("\n",""), # TIPO DO FUNDO
-        treeI10.xpath('//*[@id="table-indicators"]/div[8]/div[2]/div/span/text()')[0].replace("\n",""), # TIPO DE GESTÃO
+        checkData(treeI10.xpath('//*[@id="table-indicators"]/div[6]/div[2]/div/span/text()')), # TIPO DO FUNDO
+        checkData(treeI10.xpath('//*[@id="table-indicators"]/div[8]/div[2]/div/span/text()')), # TIPO DE GESTÃO
 
         # FUNDS EXPLORER
-        treeFE.xpath('(//span[@class="indicator-value"])[1]/text()')[0].replace("\n","").replace(" ",""), # QTD. DE NEGOCIAÇÕES DIÁRIAS
-        treeFE.xpath('(//span[@class="description"])[12]/text()')[0].replace("\n","").replace(" ",""), # SEGMENTO
-        re.sub("[^0-9]", "", qtdAtivos[0])
+        checkValues(treeFE.xpath('(//span[@class="indicator-value"])[1]/text()')), # QTD. DE NEGOCIAÇÕES DIÁRIAS
+        checkData(treeFE.xpath('(//span[@class="description"])[12]/text()')), # SEGMENTO
+        qtdAtivos
 
         # TO-DO - OBTER OS DADOS DA VACANCIA
     ]
@@ -114,7 +147,7 @@ for fii in data:
     treeI10 = html.fromstring(pageI10.content)  
 
     pageFE = requests.get('https://www.fundsexplorer.com.br/funds/' + fii)
-    treeFE = html.fromstring(pageFE.content)
+    treeFE = html.fromstring(pageFE.content.decode('utf-8'))
 
     processData(fii)
     sheetRow +=1
